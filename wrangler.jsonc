@@ -3,9 +3,6 @@
   "name": "kuranai-com",
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-09-12",
-  "secrets": {
-    "required": ["DOVARI_PASSWORD"],
-  },
   "assets": {
     "binding": "STATIC_ASSETS",
     "not_found_handling": "single-page-application",
