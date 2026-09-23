@@ -40,8 +40,8 @@
   },
   "routes": [
     {
-      "pattern": "dovari.dev",
-      "zone_name": "dovari.dev",
+      "pattern": "kuranai.com",
+      "zone_name": "kuranai.com",
       "custom_domain": true,
       "enabled": true,
       "previews_enabled": false,
