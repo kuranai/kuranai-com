@@ -1,0 +1,58 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "kuranai-com",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-09-12",
+  "secrets": {
+    "required": ["DOVARI_PASSWORD"],
+  },
+  "assets": {
+    "binding": "STATIC_ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/",
+      "/app",
+      "/app/*",
+      "/api/*",
+      "/p",
+      "/p/*",
+      "/robots.txt",
+      "/sitemap.xml",
+    ],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kuranai-com",
+      "migrations_dir": "migrations",
+      "remote": false,"database_id": "c26b2b27-7730-4e7c-b6a3-94150cd77fcb",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ASSETS",
+      "bucket_name": "kuranai-com-assets",
+      "remote": false,"preview_bucket_name": "kuranai-com-assets",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA",
+  },
+  "routes": [
+    {
+      "pattern": "dovari.dev",
+      "zone_name": "dovari.dev",
+      "custom_domain": true,
+      "enabled": true,
+      "previews_enabled": false,
+    },
+  ],
+  "vars": {
+    "ACCESS_AUD": "fdbd535a1fc6094991e43e8f3f6bd2456ee48e3e26d7c2f7d2ed543c068ab29d",
+    "ACCESS_TEAM_DOMAIN": "https://kuranai.cloudflareaccess.com",
+    "DOVARI_ENV": "production",
+  },
+}

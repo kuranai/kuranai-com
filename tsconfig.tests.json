@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": [
+      "@cloudflare/vitest-plugin/types",
+      "@cloudflare/workers-types",
+      "@playwright/test",
+      "node"
+    ],
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "test/**/*.ts",
+    "vitest*.ts",
+    "playwright.config.ts",
+    "e2e/**/*.ts",
+    "worker-configuration.d.ts"
+  ]
+}

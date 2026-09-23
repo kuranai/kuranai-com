@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Tiptap content derivations > keeps plaintext and Markdown deterministic across a JSON roundtrip 1`] = `
+"## Markdown export
+
+Read ***this*** and [guide](https://example.com/docs_\\(1\\))\\
+next
+
+- First item
+  - Nested item
+
+3. Three
+4. Four
+
+- [ ] Todo
+- [x] Done
+
+> Quoted
+
+\`\`\`\`ts
+const fence = \`value\`;
+\`\`\`
+\`\`\`\`
+
+---
+
+![Screenshot](assets/11111111-1111-4111-8111-111111111111 "A capture") and [notes.txt](assets/11111111-1111-4111-8111-111111111111 "Notes")"
+`;

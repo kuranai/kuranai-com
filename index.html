@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Dovari is a quiet, private knowledge base for useful things."
+    />
+    <meta name="theme-color" content="#f0ede6" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23282622'/%3E%3Cpath d='M20 14h11c12 0 19 7 19 18s-7 18-19 18H20V14Zm10 9v18h1c6 0 9-3 9-9s-3-9-9-9h-1Z' fill='%23fbf9f5'/%3E%3C/svg%3E"
+    />
+    <title>Dovari</title>
+    <script>
+      (() => {
+        try {
+          const preference = window.localStorage.getItem('dovari-theme');
+          const isDark =
+            preference === 'dark' ||
+            (preference !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
+        } catch {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/client/main.tsx"></script>
+  </body>
+</html>
