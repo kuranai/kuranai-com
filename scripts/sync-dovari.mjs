@@ -71,7 +71,10 @@ function assertOnBranch() {
 }
 
 function ensureUpstreamRemote() {
-  const remoteResult = git(['remote', 'get-url', upstreamRemote], { allowFailure: true });
+  const remoteResult = git(['remote', 'get-url', upstreamRemote], {
+    allowFailure: true,
+    capture: true,
+  });
   if (remoteResult.status !== 0) {
     git(['remote', 'add', upstreamRemote, upstreamUrl]);
     console.log(`Added ${upstreamRemote} remote: ${upstreamUrl}`);
