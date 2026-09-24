@@ -22,14 +22,16 @@
       "binding": "DB",
       "database_name": "kuranai-com",
       "migrations_dir": "migrations",
-      "remote": false,"database_id": "c26b2b27-7730-4e7c-b6a3-94150cd77fcb",
+      "remote": false,
+      "database_id": "c26b2b27-7730-4e7c-b6a3-94150cd77fcb",
     },
   ],
   "r2_buckets": [
     {
       "binding": "ASSETS",
       "bucket_name": "kuranai-com-assets",
-      "remote": false,"preview_bucket_name": "kuranai-com-assets",
+      "remote": false,
+      "preview_bucket_name": "kuranai-com-assets",
     },
   ],
   "observability": {

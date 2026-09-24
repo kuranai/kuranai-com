@@ -30,7 +30,8 @@
     "deploy": "node scripts/deploy.mjs",
     "deploy:dry-run": "node scripts/deploy.mjs --dry-run",
     "release:install-smoke": "node scripts/install-smoke.mjs",
-    "release:smoke": "node scripts/release-smoke.mjs"
+    "release:smoke": "node scripts/release-smoke.mjs",
+    "sync:dovari": "node scripts/sync-dovari.mjs"
   },
   "dependencies": {
     "@tiptap/extension-code-block-lowlight": "^3.31.3",
@@ -87,7 +88,7 @@
   "cloudflare": {
     "bindings": {
       "DOVARI_PASSWORD": {
-        "description": "Choose the private owner password for this Dovari installation (maximum 256 UTF-8 bytes)."
+        "description": "Choose the private owner password for this Dovari installation (maximum 256 UTF-8 bytes). The deployment keeps this value in Cloudflare as a runtime secret; never commit it."
       }
     }
   }

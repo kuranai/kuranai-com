@@ -150,8 +150,17 @@ The deployment runner builds the application, provisions or connects the configu
 resources, applies pending migrations, and deploys the Worker. Validate the production artifact
 without changing Cloudflare resources with `npm run deploy:dry-run`.
 
-To use a custom hostname, add one under **Workers & Pages → dovari → Settings → Domains & Routes**
-in the Cloudflare dashboard.
+This installation already uses `kuranai.com` as its custom hostname. The deployment-specific
+Cloudflare configuration is kept in `wrangler.jsonc` and must not be replaced with the generic
+Dovari source configuration.
+
+## Automatic upstream synchronization
+
+This repository is the `kuranai.com` deployment instance of Dovari. The daily GitHub Actions
+workflow imports new application changes from [`kuranai/dovari`](https://github.com/kuranai/dovari),
+keeps the local Cloudflare resources, runs the quality gates, and deploys the tested Worker. See
+the [upstream synchronization guide](docs/UPSTREAM-SYNC.md) for the required GitHub secrets and
+the manual command.
 
 ## Security model and current limitations
 
