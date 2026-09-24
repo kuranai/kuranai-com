@@ -160,7 +160,8 @@ This repository is the `kuranai.com` deployment instance of Dovari. The daily Gi
 workflow imports new application changes from [`kuranai/dovari`](https://github.com/kuranai/dovari),
 keeps the local Cloudflare resources, runs the quality gates, and deploys the tested Worker. See
 the [upstream synchronization guide](docs/UPSTREAM-SYNC.md) for the required GitHub secrets and
-the manual command.
+the manual commands. With a local Wrangler login, `npm run update:dovari` performs the complete
+sync, test, deploy, and push flow in one step.
 
 ## Security model and current limitations
 

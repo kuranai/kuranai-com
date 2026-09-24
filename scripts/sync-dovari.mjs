@@ -20,6 +20,7 @@ const preservedFiles = [
   'README.md',
   'scripts/install-smoke.mjs',
   'scripts/sync-dovari.mjs',
+  'scripts/update-dovari.mjs',
   'wrangler.jsonc',
   '.github/workflows/sync-dovari.yml',
 ];
@@ -137,6 +138,7 @@ function patchLocalPackageMetadata() {
     packageJson.name = 'kuranai-com';
     packageJson.scripts ??= {};
     packageJson.scripts['sync:dovari'] = 'node scripts/sync-dovari.mjs';
+    packageJson.scripts['update:dovari'] = 'node scripts/update-dovari.mjs';
     writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
     git(['add', '--', 'package.json']);
   }

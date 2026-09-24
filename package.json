@@ -31,7 +31,8 @@
     "deploy:dry-run": "node scripts/deploy.mjs --dry-run",
     "release:install-smoke": "node scripts/install-smoke.mjs",
     "release:smoke": "node scripts/release-smoke.mjs",
-    "sync:dovari": "node scripts/sync-dovari.mjs"
+    "sync:dovari": "node scripts/sync-dovari.mjs",
+    "update:dovari": "node scripts/update-dovari.mjs"
   },
   "dependencies": {
     "@tiptap/extension-code-block-lowlight": "^3.31.3",

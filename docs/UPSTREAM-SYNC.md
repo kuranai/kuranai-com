@@ -38,6 +38,15 @@ npm run ci
 npm run deploy
 ```
 
+With a local `npx wrangler login` session, the complete flow is also available as one command:
+
+```sh
+npm run update:dovari
+```
+
+It only deploys and pushes when a new upstream commit was merged. If tests or deployment fail, the
+new merge remains local and is not pushed to `main`.
+
 The sync script requires a clean working tree and creates a merge commit. It handles the existing
 unrelated Git histories on the first run; later runs use ordinary upstream merges. Use
 `npm run sync:dovari -- --dry-run` to inspect the upstream tree without changing files.
@@ -49,7 +58,7 @@ The sync deliberately keeps these files from this repository:
 - `wrangler.jsonc`, including the `kuranai.com` route, D1 database, R2 bucket, and Access values;
 - `README.md`, `AGENTS.md`, and `IMPLEMENTATION.md`;
 - the installation-specific `scripts/install-smoke.mjs`;
-- this synchronization script and workflow.
+- the synchronization/update scripts and workflow.
 
 Dependency and application changes from Dovari are still imported. The package name is normalized
 back to `kuranai-com` after each sync so `package.json` and `package-lock.json` remain consistent.
