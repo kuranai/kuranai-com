@@ -88,7 +88,7 @@
   "cloudflare": {
     "bindings": {
       "DOVARI_PASSWORD": {
-        "description": "Choose the private owner password for this Dovari installation (maximum 256 UTF-8 bytes). The deployment keeps this value in Cloudflare as a runtime secret; never commit it."
+        "description": "Choose the private owner password for this Dovari installation (maximum 256 UTF-8 bytes). The Deploy to Cloudflare button stores it as an encrypted runtime secret; never put it in vars or commit it."
       }
     }
   }

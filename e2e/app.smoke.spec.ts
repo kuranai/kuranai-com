@@ -498,6 +498,30 @@ test('covers search, screenshot paste, drag and drop, and Markdown export', asyn
   });
   await expect(editor.locator('.asset-image-node')).toHaveCount(1);
 
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: new URL(page.url()).origin,
+  });
+  const wroteClipboardImage = await page.evaluate(async () => {
+    if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+      return false;
+    }
+
+    const bytes = Uint8Array.from(
+      atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      ),
+      (character) => character.charCodeAt(0),
+    );
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'image/png': new Blob([bytes], { type: 'image/png' }) }),
+    ]);
+    return true;
+  });
+  expect(wroteClipboardImage).toBe(true);
+  await editor.click();
+  await page.keyboard.press('Control+V');
+  await expect(editor.locator('.asset-image-node')).toHaveCount(2);
+
   const editorBox = await editor.boundingBox();
   if (!editorBox) {
     throw new Error('The page editor has no visible bounding box for the drop smoke.');
@@ -522,7 +546,7 @@ test('covers search, screenshot paste, drag and drop, and Markdown export', asyn
     },
     { x: editorBox.x + 24, y: editorBox.y + 24 },
   );
-  await expect(editor.locator('.asset-image-node')).toHaveCount(2);
+  await expect(editor.locator('.asset-image-node')).toHaveCount(3);
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 
   await page.getByRole('link', { name: 'Settings' }).click();
@@ -548,6 +572,74 @@ test('covers search, screenshot paste, drag and drop, and Markdown export', asyn
   await confirmation.getByLabel(/Type .* to confirm/).fill(title);
   await confirmation.getByRole('button', { name: 'Confirm permanent delete' }).click();
   await expect(trashItem).toHaveCount(0);
+});
+
+test('resizes images with presets and moves an existing image without copying it', async ({
+  page,
+}) => {
+  const title = `Image editing ${Date.now()}`;
+
+  await page.goto('/app');
+  await page.getByRole('button', { name: /New page/ }).click();
+  await expect(page.getByRole('heading', { name: 'Untitled' })).toBeVisible();
+  await page.getByLabel('Edit title').fill(title);
+  await page.getByLabel('Edit title').press('Enter');
+
+  const editor = page.getByRole('textbox', { name: 'Page content' });
+  await editor.fill('Before image\nAfter image');
+  await editor.locator('p').last().click();
+  await page.keyboard.press('End');
+  await editor.evaluate((element) => {
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(
+      new File(
+        [
+          Uint8Array.from(
+            atob(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+            ),
+            (character) => character.charCodeAt(0),
+          ),
+        ],
+        'image.png',
+        { type: 'image/png' },
+      ),
+    );
+    element.dispatchEvent(
+      new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: dataTransfer,
+      }),
+    );
+  });
+
+  const image = editor.locator('.asset-image-node');
+  await expect(image).toHaveCount(1);
+  await image.click();
+
+  const imageBox = await image.boundingBox();
+  const targetBox = await editor.locator('p').first().boundingBox();
+  if (!imageBox || !targetBox) {
+    throw new Error('The image or drop target has no visible bounding box.');
+  }
+  await page.keyboard.down('Control');
+  await page.mouse.move(imageBox.x + imageBox.width / 2, imageBox.y + imageBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + 8, targetBox.y + targetBox.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Control');
+  await expect(image).toHaveCount(1);
+  await expect(editor.locator('p').first().locator('.asset-image-node')).toHaveCount(1);
+  await expect(editor.locator('p').last().locator('.asset-image-node')).toHaveCount(0);
+
+  await expect(page.getByRole('button', { name: 'Small' })).toBeVisible();
+  await expect(page.getByRole('spinbutton')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Medium' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Delete page' }).click();
+  await expect(page).toHaveURL('/app');
 });
 
 test('supports a navigable page tree with child creation, collapse, drag move, and direct rename', async ({
@@ -1001,12 +1093,36 @@ test('keeps the formatting toolbar reachable while a long document is scrolled',
 }) => {
   const { editor, toolbar } = await openLongEditorPage(page);
 
+  await expect(toolbar.getByRole('button', { name: 'Checklist' })).toHaveAttribute(
+    'aria-keyshortcuts',
+    'Alt+C',
+  );
+  await expect(toolbar.getByRole('button', { name: 'Checklist' })).toHaveAttribute(
+    'title',
+    /Alt\+C/u,
+  );
+
   await editor.locator('p').last().scrollIntoViewIfNeeded();
 
   const toolbarBox = await toolbar.boundingBox();
   expect(toolbarBox).not.toBeNull();
   expect(toolbarBox?.y).toBeGreaterThanOrEqual(0);
   expect(toolbarBox?.y).toBeLessThan(page.viewportSize()?.height ?? 0);
+
+  const headerBox = await page.locator('.app-header').boundingBox();
+  expect(headerBox).not.toBeNull();
+  expect(toolbarBox?.y).toBeGreaterThanOrEqual((headerBox?.y ?? 0) + (headerBox?.height ?? 0));
+
+  await page.setViewportSize({ width: 820, height: 720 });
+  await editor.locator('p').last().scrollIntoViewIfNeeded();
+  const narrowToolbarBox = await toolbar.boundingBox();
+  const narrowHeaderBox = await page.locator('.app-header').boundingBox();
+  expect(narrowToolbarBox).not.toBeNull();
+  expect(narrowHeaderBox).not.toBeNull();
+  expect(narrowToolbarBox?.y).toBeGreaterThanOrEqual(
+    (narrowHeaderBox?.y ?? 0) + (narrowHeaderBox?.height ?? 0),
+  );
+  expect(narrowToolbarBox?.y).toBeLessThan(page.viewportSize()?.height ?? 0);
 });
 
 test('docks the mobile toolbar above the keyboard inset', async ({ page }) => {

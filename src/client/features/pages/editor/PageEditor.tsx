@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChangeEvent,
+  ClipboardEvent as ReactClipboardEvent,
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
@@ -12,6 +13,7 @@ import type { PageSummary, TiptapDocument } from '../../../../shared/pages';
 import type { UploadAsset } from '../../assets/api';
 import { createPage, searchWikiLinkPages, type PageApiError } from '../api';
 import { EditorToolbar } from './EditorToolbar';
+import { editorShortcutForEvent, type EditorShortcutId } from './editorShortcuts';
 import {
   createPageEditorExtensions,
   safeEditorDocument,
@@ -23,7 +25,12 @@ import {
   type LinkPopoverMode,
   type LinkPopoverPosition,
 } from './LinkPopover';
-import { AssetUploadController } from './assetUpload';
+import {
+  AssetUploadController,
+  clipboardMayContainImage,
+  filesFromClipboard,
+  readClipboardImageFiles,
+} from './assetUpload';
 import {
   findWikiLinkQuery,
   normalizedWikiLinkQuery,
@@ -142,20 +149,33 @@ function pageErrorMessage(error: unknown) {
 }
 
 function useVisualViewportKeyboardInset() {
-  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [viewportState, setViewportState] = useState({
+    keyboardInset: 0,
+    visualViewportBottom: 0,
+  });
 
   useEffect(() => {
     function updateKeyboardInset() {
       const viewport = window.visualViewport;
       if (!viewport) {
+        setViewportState({ keyboardInset: 0, visualViewportBottom: window.innerHeight });
         return;
       }
 
-      const nextInset = Math.max(
-        0,
-        Math.round(window.innerHeight - viewport.height - viewport.offsetTop),
+      const visualViewportBottom = Math.min(
+        window.innerHeight,
+        Math.round(viewport.offsetTop + viewport.height),
       );
-      setKeyboardInset((currentInset) => (currentInset === nextInset ? currentInset : nextInset));
+      const nextState = {
+        keyboardInset: Math.max(0, Math.round(window.innerHeight - visualViewportBottom)),
+        visualViewportBottom,
+      };
+      setViewportState((currentState) =>
+        currentState.keyboardInset === nextState.keyboardInset &&
+        currentState.visualViewportBottom === nextState.visualViewportBottom
+          ? currentState
+          : nextState,
+      );
     }
 
     updateKeyboardInset();
@@ -173,7 +193,7 @@ function useVisualViewportKeyboardInset() {
     };
   }, []);
 
-  return keyboardInset;
+  return viewportState;
 }
 
 export function PageEditor({
@@ -191,7 +211,9 @@ export function PageEditor({
 }: PageEditorProps) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const keyboardInset = useVisualViewportKeyboardInset();
+  const { keyboardInset, visualViewportBottom } = useVisualViewportKeyboardInset();
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [toolbarHeight, setToolbarHeight] = useState(0);
   const [slashCommandSession, setSlashCommandSession] = useState<SlashCommandSession | null>(null);
   const [slashCommandActiveIndex, setSlashCommandActiveIndex] = useState(0);
   const [wikiLinkSession, setWikiLinkSession] = useState<WikiLinkSession | null>(null);
@@ -268,6 +290,29 @@ export function PageEditor({
     },
     [extensions, updateSlashCommandSession, updateWikiLinkSession],
   );
+
+  useLayoutEffect(() => {
+    const toolbar = toolbarRef.current?.querySelector<HTMLDivElement>('.editor-toolbar');
+    if (!toolbar) {
+      return;
+    }
+
+    const updateToolbarHeight = () => {
+      const nextHeight = Math.round(toolbar.getBoundingClientRect().height);
+      setToolbarHeight((currentHeight) =>
+        currentHeight === nextHeight ? currentHeight : nextHeight,
+      );
+    };
+
+    updateToolbarHeight();
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver(updateToolbarHeight);
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, [editor]);
 
   function editorSelectionForLink(link?: HTMLAnchorElement) {
     if (!editor) {
@@ -633,6 +678,117 @@ export function PageEditor({
     }
   }
 
+  function runEditorShortcut(shortcut: EditorShortcutId) {
+    if (!editor) {
+      return false;
+    }
+
+    if (shortcut === 'link') {
+      openLinkPopover('edit');
+      return true;
+    }
+    if (shortcut === 'wikiLink') {
+      openWikiLinkPicker();
+      return true;
+    }
+
+    const chain = editor.chain().focus();
+    switch (shortcut) {
+      case 'paragraph':
+        chain.setParagraph();
+        break;
+      case 'heading1':
+        chain.toggleHeading({ level: 1 });
+        break;
+      case 'heading2':
+        chain.toggleHeading({ level: 2 });
+        break;
+      case 'heading3':
+        chain.toggleHeading({ level: 3 });
+        break;
+      case 'bold':
+        chain.toggleBold();
+        break;
+      case 'italic':
+        chain.toggleItalic();
+        break;
+      case 'strike':
+        chain.toggleStrike();
+        break;
+      case 'code':
+        chain.toggleCode();
+        break;
+      case 'bulletList':
+        chain.toggleBulletList();
+        break;
+      case 'orderedList':
+        chain.toggleOrderedList();
+        break;
+      case 'taskList':
+        chain.toggleTaskList();
+        break;
+      case 'blockquote':
+        chain.toggleBlockquote();
+        break;
+      case 'codeBlock':
+        chain.toggleCodeBlock();
+        break;
+      case 'divider':
+        chain.setHorizontalRule();
+        break;
+      default:
+        return false;
+    }
+
+    return chain.run();
+  }
+
+  function handleEditorShortcut(event: ReactKeyboardEvent<HTMLElement>) {
+    if (!editor) {
+      return false;
+    }
+
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('.asset-image-controls')) {
+      return false;
+    }
+
+    const shortcut = editorShortcutForEvent(event);
+    if (!shortcut) {
+      return false;
+    }
+
+    event.preventDefault();
+    runEditorShortcut(shortcut);
+    return true;
+  }
+
+  function handleEditorPaste(event: ReactClipboardEvent<HTMLElement>) {
+    if (!editor || !(event.target instanceof Node) || !editor.view.dom.contains(event.target)) {
+      return;
+    }
+
+    const files = filesFromClipboard(event.clipboardData);
+    if (files.length === 0) {
+      if (!clipboardMayContainImage(event.clipboardData)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      void readClipboardImageFiles(event.clipboardData).then((clipboardFiles) => {
+        if (clipboardFiles.length > 0 && !editor.isDestroyed) {
+          assetUpload.handlePaste(editor, clipboardFiles);
+        }
+      });
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    assetUpload.handlePaste(editor, files);
+  }
+
   function handleEditorKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (!editor || !(event.target instanceof Node) || !editor.view.dom.contains(event.target)) {
       return;
@@ -645,6 +801,10 @@ export function PageEditor({
 
     handleWikiLinkKeyDown(event);
     if (event.defaultPrevented || wikiLinkSession) {
+      return;
+    }
+
+    if (handleEditorShortcut(event)) {
       return;
     }
 
@@ -702,8 +862,6 @@ export function PageEditor({
     });
   }
 
-  useEffect(() => () => assetUpload.dispose(), [assetUpload]);
-
   useEffect(() => {
     if (!editor) {
       return;
@@ -719,6 +877,8 @@ export function PageEditor({
 
   const editorStyle = {
     '--editor-keyboard-inset': `${keyboardInset}px`,
+    '--editor-toolbar-height': `${toolbarHeight}px`,
+    '--editor-visual-viewport-bottom': `${visualViewportBottom}px`,
   } as CSSProperties;
 
   return (
@@ -727,11 +887,12 @@ export function PageEditor({
       className="page-editor"
       onClick={handleEditorClick}
       onKeyDownCapture={handleEditorKeyDown}
+      onPasteCapture={handleEditorPaste}
       style={editorStyle}
     >
       {editor ? (
         <>
-          <div className="page-editor-topbar">
+          <div className="page-editor-topbar" ref={toolbarRef}>
             <EditorToolbar
               editor={editor}
               onOpenLink={() => openLinkPopover('edit')}

@@ -2,6 +2,8 @@ import type { MouseEvent, ReactNode } from 'react';
 import type { Editor } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 
+import { EDITOR_SHORTCUTS } from './editorShortcuts';
+
 const CODE_BLOCK_LANGUAGES = [
   ['', 'Auto-detect'],
   ['plaintext', 'Plain text'],
@@ -48,22 +50,36 @@ interface ToolbarButtonProps {
   disabled?: boolean;
   label: string;
   onClick: () => void;
+  shortcut?: string;
+  shortcutAria?: string;
 }
 
-function ToolbarButton({ active, children, disabled = false, label, onClick }: ToolbarButtonProps) {
+function ToolbarButton({
+  active,
+  children,
+  disabled = false,
+  label,
+  onClick,
+  shortcut,
+  shortcutAria,
+}: ToolbarButtonProps) {
   function keepEditorSelection(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
   }
 
+  const tooltip = shortcut ? `${label} — ${shortcut}` : label;
+
   return (
     <button
       aria-label={label}
+      aria-keyshortcuts={shortcutAria ?? shortcut}
       aria-pressed={active}
       className={active ? 'editor-toolbar-button is-active' : 'editor-toolbar-button'}
+      data-tooltip={tooltip}
       disabled={disabled}
       onClick={onClick}
       onMouseDown={keepEditorSelection}
-      title={label}
+      title={tooltip}
       type="button"
     >
       {children}
@@ -106,6 +122,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.paragraph}
           label="Text"
           onClick={() => editor.chain().focus().setParagraph().run()}
+          shortcut={EDITOR_SHORTCUTS.paragraph}
         >
           Text
         </ToolbarButton>
@@ -113,6 +130,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.heading1}
           label="Heading 1"
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          shortcut={EDITOR_SHORTCUTS.heading1}
         >
           H1
         </ToolbarButton>
@@ -120,6 +138,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.heading2}
           label="Heading 2"
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          shortcut={EDITOR_SHORTCUTS.heading2}
         >
           H2
         </ToolbarButton>
@@ -127,6 +146,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.heading3}
           label="Heading 3"
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          shortcut={EDITOR_SHORTCUTS.heading3}
         >
           H3
         </ToolbarButton>
@@ -139,6 +159,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.bold}
           label="Bold"
           onClick={() => editor.chain().focus().toggleBold().run()}
+          shortcut={EDITOR_SHORTCUTS.bold}
         >
           <strong>B</strong>
         </ToolbarButton>
@@ -146,6 +167,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.italic}
           label="Italic"
           onClick={() => editor.chain().focus().toggleItalic().run()}
+          shortcut={EDITOR_SHORTCUTS.italic}
         >
           <em>I</em>
         </ToolbarButton>
@@ -153,6 +175,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.strike}
           label="Strike"
           onClick={() => editor.chain().focus().toggleStrike().run()}
+          shortcut={EDITOR_SHORTCUTS.strike}
         >
           <s>S</s>
         </ToolbarButton>
@@ -160,13 +183,23 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.code}
           label="Inline code"
           onClick={() => editor.chain().focus().toggleCode().run()}
+          shortcut={EDITOR_SHORTCUTS.code}
         >
           {'</>'}
         </ToolbarButton>
-        <ToolbarButton active={active.link} label="Link" onClick={onOpenLink}>
+        <ToolbarButton
+          active={active.link}
+          label="Link"
+          onClick={onOpenLink}
+          shortcut={EDITOR_SHORTCUTS.link}
+        >
           ↗
         </ToolbarButton>
-        <ToolbarButton label="Wiki link" onClick={onOpenWikiLink}>
+        <ToolbarButton
+          label="Wiki link"
+          onClick={onOpenWikiLink}
+          shortcut={EDITOR_SHORTCUTS.wikiLink}
+        >
           Wiki link
         </ToolbarButton>
       </div>
@@ -178,6 +211,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.bulletList}
           label="Bullet list"
           onClick={() => editor.chain().focus().toggleBulletList().run()}
+          shortcut={EDITOR_SHORTCUTS.bulletList}
         >
           • List
         </ToolbarButton>
@@ -185,6 +219,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.orderedList}
           label="Ordered list"
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          shortcut={EDITOR_SHORTCUTS.orderedList}
         >
           1. List
         </ToolbarButton>
@@ -192,6 +227,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.taskList}
           label="Checklist"
           onClick={() => editor.chain().focus().toggleTaskList().run()}
+          shortcut={EDITOR_SHORTCUTS.taskList}
         >
           ☑ List
         </ToolbarButton>
@@ -199,6 +235,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.blockquote}
           label="Quote"
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          shortcut={EDITOR_SHORTCUTS.blockquote}
         >
           “ Quote
         </ToolbarButton>
@@ -206,6 +243,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           active={active.codeBlock}
           label="Code block"
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          shortcut={EDITOR_SHORTCUTS.codeBlock}
         >
           Code
         </ToolbarButton>
@@ -235,6 +273,7 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
         <ToolbarButton
           label="Divider"
           onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          shortcut={EDITOR_SHORTCUTS.divider}
         >
           —
         </ToolbarButton>
@@ -247,6 +286,8 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           disabled={!editor.can().undo()}
           label="Undo"
           onClick={() => editor.chain().focus().undo().run()}
+          shortcut="Ctrl/Cmd+Z"
+          shortcutAria="Control+Z Meta+Z"
         >
           ↶
         </ToolbarButton>
@@ -254,6 +295,8 @@ export function EditorToolbar({ editor, onOpenLink, onOpenWikiLink }: EditorTool
           disabled={!editor.can().redo()}
           label="Redo"
           onClick={() => editor.chain().focus().redo().run()}
+          shortcut="Ctrl/Cmd+Shift+Z"
+          shortcutAria="Control+Shift+Z Meta+Shift+Z"
         >
           ↷
         </ToolbarButton>

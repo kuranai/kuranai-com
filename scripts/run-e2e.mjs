@@ -79,6 +79,7 @@ try {
           'test',
           '--config',
           'playwright.config.ts',
+          ...process.argv.slice(2),
         ])
       : 1;
   process.exitCode = testCode;

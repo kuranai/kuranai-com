@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AssetResponse } from '../../../../shared/assets';
@@ -64,6 +68,7 @@ const documentWithFormatting: TiptapDocument = {
 };
 
 const assetId = '11111111-1111-4111-8111-111111111111';
+const appStyles = readFileSync(resolve(process.cwd(), 'src/client/app/app.css'), 'utf8');
 
 const documentWithAssets: TiptapDocument = {
   type: 'doc',
@@ -180,6 +185,24 @@ describe('PageEditor', () => {
     expect(JSON.stringify(documentWithAssets)).not.toContain('blob:');
   });
 
+  it('keeps the missing-image fallback hidden while the image is available', async () => {
+    render(<PageEditor content={documentWithAssets} />);
+
+    const editor = await screen.findByRole('textbox', { name: 'Page content' });
+    const image = editor.querySelector('.asset-image-node');
+    const fallback = editor.querySelector('.asset-missing-fallback');
+
+    expect(image).not.toBeNull();
+    expect(fallback).not.toBeNull();
+    expect(fallback?.hasAttribute('hidden')).toBe(true);
+    expect(appStyles).toMatch(
+      /\.page-editor-content \.asset-image-node\[hidden\][^{]*\{[^}]*display:\s*none[^}]*\}/u,
+    );
+    expect(appStyles).toMatch(
+      /\.page-editor-content \.asset-missing-fallback\[hidden\][^{]*\{[^}]*display:\s*none[^}]*\}/u,
+    );
+  });
+
   it('shows a readable fallback when an inline asset cannot be loaded', async () => {
     render(<PageEditor content={documentWithAssets} />);
 
@@ -192,6 +215,66 @@ describe('PageEditor', () => {
     const fallback = await screen.findByText('Image unavailable: A screenshot');
     expect(fallback.hidden).toBe(false);
     expect(image?.getAttribute('data-dovari-asset-status')).toBe('missing');
+
+    fireEvent.load(image!);
+
+    expect(fallback.hidden).toBe(true);
+    expect(image?.getAttribute('data-dovari-asset-status')).toBe('available');
+  });
+
+  it('offers preset image sizes and restores the original image size', async () => {
+    const onChange = vi.fn();
+    render(
+      <PageEditor
+        content={{
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'assetImage',
+                  attrs: { assetId, alt: 'Sized image', height: 180, title: null, width: 320 },
+                },
+              ],
+            },
+          ],
+        }}
+        onChange={onChange}
+      />,
+    );
+
+    const editor = await screen.findByRole('textbox', { name: 'Page content' });
+    const image = editor.querySelector('.asset-image-node');
+    expect(image).not.toBeNull();
+    expect((image as HTMLImageElement).draggable).toBe(false);
+
+    fireEvent.click(image!);
+
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Small' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Medium' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Large' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Original' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Medium' }));
+
+    await waitFor(() => {
+      const serialized = onChange.mock.lastCall?.[0] as TiptapDocument;
+      expect(serialized.content?.[0]?.content?.[0]?.attrs).toMatchObject({
+        height: 90,
+        width: 160,
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Original' }));
+    await waitFor(() => {
+      const serialized = onChange.mock.lastCall?.[0] as TiptapDocument;
+      expect(serialized.content?.[0]?.content?.[0]?.attrs).toMatchObject({
+        height: null,
+        width: null,
+      });
+    });
   });
 
   it('marks a missing attachment without breaking the surrounding document', async () => {
@@ -208,11 +291,56 @@ describe('PageEditor', () => {
     expect(screen.getByRole('textbox', { name: 'Page content' }).textContent).toContain('Before');
   });
 
-  it('uploads a pasted screenshot and inserts one asset image without a temporary URL', async () => {
-    const onChange = vi.fn();
+  it.each([false, true])(
+    'uploads a pasted screenshot exactly once (StrictMode: %s)',
+    async (strictMode) => {
+      const onChange = vi.fn();
+      const uploadAsset = vi.fn<UploadAsset>().mockResolvedValue({
+        contentUrl: `/api/private/assets/${assetId}/content`,
+        filename: 'screenshot.png',
+        id: assetId,
+        mimeType: 'image/png',
+        sizeBytes: 128,
+      });
+      render(
+        <PageEditor
+          content={{ type: 'doc', content: [{ type: 'paragraph' }] }}
+          onChange={onChange}
+          pageId="22222222-2222-4222-8222-222222222222"
+          uploadAsset={uploadAsset}
+        />,
+        { wrapper: strictMode ? StrictMode : undefined },
+      );
+
+      const editor = await screen.findByRole('textbox', { name: 'Page content' });
+      const screenshot = new File(['png bytes'], 'screenshot.png', { type: 'image/png' });
+      fireEvent.paste(editor, {
+        clipboardData: {
+          files: [screenshot],
+          getData: () => '',
+        },
+      });
+
+      await waitFor(() => expect(uploadAsset).toHaveBeenCalledOnce());
+      await waitFor(() => expect(editor.querySelector('.asset-image-node')).not.toBeNull());
+
+      expect(uploadAsset.mock.calls[0]?.[1]).toMatchObject({
+        pageId: '22222222-2222-4222-8222-222222222222',
+      });
+      const serialized = onChange.mock.lastCall?.[0] as TiptapDocument;
+      expect(serialized.content[0]?.content).toContainEqual({
+        attrs: { assetId, alt: '', height: null, title: null, width: null },
+        type: 'assetImage',
+      });
+      expect(JSON.stringify(serialized)).not.toContain('blob:');
+      expect(editor.querySelector('.asset-upload-decoration')).toBeNull();
+    },
+  );
+
+  it('uploads a pasted image when the clipboard exposes it as an item file', async () => {
     const uploadAsset = vi.fn<UploadAsset>().mockResolvedValue({
       contentUrl: `/api/private/assets/${assetId}/content`,
-      filename: 'screenshot.png',
+      filename: 'clipboard-image.png',
       id: assetId,
       mimeType: 'image/png',
       sizeBytes: 128,
@@ -220,34 +348,75 @@ describe('PageEditor', () => {
     render(
       <PageEditor
         content={{ type: 'doc', content: [{ type: 'paragraph' }] }}
-        onChange={onChange}
-        pageId="22222222-2222-4222-8222-222222222222"
+        pageId="33333333-3333-4333-8333-333333333333"
         uploadAsset={uploadAsset}
       />,
+      { wrapper: StrictMode },
     );
 
     const editor = await screen.findByRole('textbox', { name: 'Page content' });
-    const screenshot = new File(['png bytes'], 'screenshot.png', { type: 'image/png' });
+    const screenshot = new File(['png bytes'], '', { type: 'image/png' });
     fireEvent.paste(editor, {
       clipboardData: {
-        files: [screenshot],
+        files: [],
         getData: () => '',
+        items: [
+          {
+            getAsFile: () => screenshot,
+            kind: 'file',
+            type: 'image/png',
+          },
+        ],
       },
     });
 
     await waitFor(() => expect(uploadAsset).toHaveBeenCalledOnce());
     await waitFor(() => expect(editor.querySelector('.asset-image-node')).not.toBeNull());
+  });
 
-    expect(uploadAsset.mock.calls[0]?.[1]).toMatchObject({
-      pageId: '22222222-2222-4222-8222-222222222222',
+  it('reads an image from the async clipboard when the paste event only advertises files', async () => {
+    const uploadAsset = vi.fn<UploadAsset>().mockResolvedValue({
+      contentUrl: `/api/private/assets/${assetId}/content`,
+      filename: 'clipboard-image.png',
+      id: assetId,
+      mimeType: 'image/png',
+      sizeBytes: 128,
     });
-    const serialized = onChange.mock.lastCall?.[0] as TiptapDocument;
-    expect(serialized.content[0]?.content).toContainEqual({
-      attrs: { assetId, alt: '', height: null, title: null, width: null },
-      type: 'assetImage',
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([
+          {
+            getType: vi.fn().mockResolvedValue(new Blob(['png bytes'], { type: 'image/png' })),
+            types: ['image/png'],
+          },
+        ]),
+      },
+      maxTouchPoints: navigator.maxTouchPoints,
+      platform: navigator.platform,
+      userAgent: navigator.userAgent,
     });
-    expect(JSON.stringify(serialized)).not.toContain('blob:');
-    expect(editor.querySelector('.asset-upload-decoration')).toBeNull();
+    render(
+      <PageEditor
+        content={{ type: 'doc', content: [{ type: 'paragraph' }] }}
+        pageId="66666666-6666-4666-8666-666666666666"
+        uploadAsset={uploadAsset}
+      />,
+      { wrapper: StrictMode },
+    );
+
+    const editor = await screen.findByRole('textbox', { name: 'Page content' });
+    fireEvent.paste(editor, {
+      clipboardData: {
+        files: [],
+        getData: () => '',
+        items: [],
+        types: ['Files'],
+      },
+    });
+
+    await waitFor(() => expect(uploadAsset).toHaveBeenCalledOnce());
+    expect(uploadAsset.mock.calls[0]?.[0].type).toBe('image/png');
+    await waitFor(() => expect(editor.querySelector('.asset-image-node')).not.toBeNull());
   });
 
   it('does not insert an upload that finishes after the page changes', async () => {
@@ -266,6 +435,7 @@ describe('PageEditor', () => {
         pageId="44444444-4444-4444-8444-444444444444"
         uploadAsset={uploadAsset}
       />,
+      { wrapper: StrictMode },
     );
 
     const editor = await screen.findByRole('textbox', { name: 'Page content' });
@@ -287,6 +457,7 @@ describe('PageEditor', () => {
     );
     await screen.findByRole('textbox', { name: 'Page content' });
 
+    expect(uploadAsset.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     resolveUpload({
       contentUrl: `/api/private/assets/${assetId}/content`,
       filename: 'screenshot.png',
@@ -298,6 +469,54 @@ describe('PageEditor', () => {
     await Promise.resolve();
 
     expect(view.container.querySelector('.asset-image-node')).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('aborts active uploads and discards queued files when the editor unmounts', async () => {
+    const onChange = vi.fn();
+    const pendingUploads: Array<(asset: AssetResponse) => void> = [];
+    const uploadAsset = vi.fn<UploadAsset>(
+      () => new Promise((resolve) => pendingUploads.push(resolve)),
+    );
+    const view = render(
+      <PageEditor
+        content={{ type: 'doc', content: [{ type: 'paragraph' }] }}
+        onChange={onChange}
+        uploadAsset={uploadAsset}
+      />,
+      { wrapper: StrictMode },
+    );
+    const editor = await screen.findByRole('textbox', { name: 'Page content' });
+    fireEvent.paste(editor, {
+      clipboardData: {
+        files: Array.from(
+          { length: 4 },
+          (_, index) => new File(['png bytes'], `screenshot-${index}.png`, { type: 'image/png' }),
+        ),
+        getData: () => '',
+      },
+    });
+    await waitFor(() => expect(uploadAsset).toHaveBeenCalledTimes(3));
+
+    view.unmount();
+    await waitFor(() => {
+      for (const [, options] of uploadAsset.mock.calls) {
+        expect(options?.signal?.aborted).toBe(true);
+      }
+    });
+    for (const resolve of pendingUploads) {
+      resolve({
+        contentUrl: `/api/private/assets/${assetId}/content`,
+        filename: 'screenshot.png',
+        id: assetId,
+        mimeType: 'image/png',
+        sizeBytes: 128,
+      });
+    }
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(uploadAsset).toHaveBeenCalledTimes(3);
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -453,6 +672,27 @@ describe('PageEditor', () => {
         'true',
       ),
     );
+  });
+
+  it('supports fixed Alt shortcuts and exposes them on toolbar buttons', async () => {
+    render(
+      <PageEditor
+        content={{
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Keyboard ready' }] }],
+        }}
+      />,
+    );
+
+    const editor = await screen.findByRole('textbox', { name: 'Page content' });
+    const checklist = screen.getByRole('button', { name: 'Checklist' });
+    expect(checklist.getAttribute('aria-keyshortcuts')).toBe('Alt+C');
+    expect(checklist.getAttribute('title')).toContain('Alt+C');
+
+    editor.focus();
+    fireEvent.keyDown(editor, { altKey: true, key: 'c' });
+
+    await waitFor(() => expect(editor.querySelector('ul[data-type="taskList"]')).not.toBeNull());
   });
 
   it('opens the slash palette, filters commands, and inserts a heading with Enter', async () => {

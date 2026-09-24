@@ -12,6 +12,8 @@ import {
 
 export const MAX_PARALLEL_ASSET_UPLOADS = 3;
 
+const CLIPBOARD_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+
 export type AssetUploadNodeType = 'assetImage' | 'attachment';
 export type AssetUploadDecorationStatus = 'queued' | 'uploading' | 'failed';
 
@@ -139,6 +141,106 @@ function createPreviewUrl(file: File, nodeType: AssetUploadNodeType) {
   }
 
   return URL.createObjectURL(file);
+}
+
+export function filesFromClipboard(clipboardData: DataTransfer | null | undefined) {
+  if (!clipboardData) {
+    return [];
+  }
+
+  const files = Array.from(clipboardData.files ?? []);
+  if (files.length > 0) {
+    return files;
+  }
+
+  return Array.from(clipboardData.items ?? [])
+    .filter((item) => item.kind === 'file' && typeof item.getAsFile === 'function')
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file !== null);
+}
+
+function clipboardImageFilename(mimeType: string) {
+  const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType.slice('image/'.length);
+  return `clipboard-image.${extension}`;
+}
+
+export function clipboardMayContainImage(clipboardData: DataTransfer | null | undefined) {
+  if (!clipboardData) {
+    return false;
+  }
+
+  const types = Array.from(clipboardData.types ?? []);
+  if (types.some((type) => type === 'Files' || type.startsWith('image/'))) {
+    return true;
+  }
+
+  try {
+    return /<img\b/i.test(clipboardData.getData('text/html'));
+  } catch {
+    return false;
+  }
+}
+
+export async function readClipboardImageFiles(
+  clipboardData?: DataTransfer | null,
+): Promise<File[]> {
+  if (clipboardData && !clipboardMayContainImage(clipboardData)) {
+    return [];
+  }
+
+  const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+  if (clipboard && typeof clipboard.read === 'function') {
+    try {
+      const items = await clipboard.read();
+      const files = (
+        await Promise.all(
+          items.map(async (item) => {
+            const mimeType = CLIPBOARD_IMAGE_TYPES.find((type) => item.types.includes(type));
+            if (!mimeType) {
+              return null;
+            }
+
+            try {
+              const blob = await item.getType(mimeType);
+              return new File([blob], clipboardImageFilename(mimeType), { type: mimeType });
+            } catch {
+              return null;
+            }
+          }),
+        )
+      ).filter((file): file is File => file !== null);
+      if (files.length > 0) {
+        return files;
+      }
+    } catch {
+      // Some browsers expose image paste data only through the event payload.
+    }
+  }
+
+  if (!clipboardData || !clipboardMayContainImage(clipboardData)) {
+    return [];
+  }
+
+  let html: string;
+  try {
+    html = clipboardData.getData('text/html');
+  } catch {
+    return [];
+  }
+  const dataUrl =
+    /<img\b[^>]*\bsrc=["'](data:image\/(?:png|jpeg|webp|gif);base64,[^"']+)["']/i.exec(html)?.[1];
+  if (!dataUrl) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    const mimeType = CLIPBOARD_IMAGE_TYPES.find((type) => type === blob.type);
+    return mimeType ? [new File([blob], clipboardImageFilename(mimeType), { type: mimeType })] : [];
+  } catch {
+    return [];
+  }
 }
 
 function releasePreviewUrl(item: UploadItem) {
@@ -540,8 +642,32 @@ export function createAssetUploadExtension(controller: AssetUploadController) {
   return Extension.create({
     name: 'assetUploadDecorations',
 
+    onDestroy() {
+      // Match Tiptap's lifetime: React StrictMode replays effect cleanup while
+      // keeping the editor alive, so component cleanup must not dispose uploads.
+      controller.dispose();
+    },
+
     addProseMirrorPlugins() {
-      return [createAssetUploadPlugin(controller)];
+      const editor = this.editor;
+      return [
+        new Plugin({
+          props: {
+            handlePaste: (_view, event) => {
+              const files = filesFromClipboard(event.clipboardData);
+              if (files.length === 0) {
+                return false;
+              }
+
+              event.preventDefault();
+              event.stopPropagation();
+              controller.handlePaste(editor, files);
+              return true;
+            },
+          },
+        }),
+        createAssetUploadPlugin(controller),
+      ];
     },
   });
 }
